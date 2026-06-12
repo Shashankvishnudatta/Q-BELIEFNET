@@ -141,6 +141,43 @@ The in-memory cache tracks fresh hits, misses, stale entries, stale reasons, age
 
 `background_refresh.py` provides optional scheduled refresh and in-memory run history. It calls the same evidence pipeline used by APIs, records success/failure by symbol, provider result summaries, cache updates, fallback counts, duration, and errors.
 
+## Durable Persistence Layer
+
+Phase 5 adds a lightweight SQLite persistence layer under `backend/app/db/`.
+
+```text
+Provider Registry
+ -> Reliability Wrapper
+ -> Evidence Pipeline
+ -> Cache
+ -> Belief Engine
+ -> SQLite Persistence
+ -> API/WebSocket
+ -> Frontend Workspace + Observability Panels
+```
+
+Tracked stores:
+
+- `belief_snapshots`: latest N snapshots per symbol with score, metrics, provenance, evidence bundle, narratives, and explanations.
+- `ingestion_runs`: manual/background refresh run history.
+- `provider_health_events`: redacted provider health snapshots.
+- `evidence_cache_records`: durable cache metadata, not secrets.
+- `watchlist_items`, `portfolio_items`, `alert_rules`: local workspace state.
+- `operation_audit_log`: manual refreshes, workspace edits, and snapshot generation operations.
+
+If persistence is disabled or unavailable, APIs keep serving demo/prototype responses and status reports persistence availability. SQLite uses a workspace-local database by default and does not store provider credentials.
+
+## Manual Operations Safety
+
+Manual refresh is protected by configuration rather than full auth:
+
+- `ENABLE_MANUAL_REFRESH`
+- `REQUIRE_MANUAL_REFRESH_TOKEN`
+- `MANUAL_REFRESH_TOKEN`
+- `MAX_MANUAL_REFRESH_SYMBOLS`
+
+When required, callers must send `X-QBN-Admin-Token`. Status only reports whether a token is required; it never returns the token.
+
 ### Belief Score Formula
 
 `belief_score` combines attention, sentiment, momentum, source agreement, and inverse fragility into a 0-100 interpretive signal. The implementation uses transparent weighted arithmetic instead of opaque ML so the score can be inspected and tested.
@@ -168,6 +205,7 @@ Narratives are grouped with keyword rules across earnings, product/news, analyst
 4. If configured, backend calls Hugging Face chat completions with a no-financial-advice prompt.
 5. If not configured, backend returns a local belief-aware fallback answer with source mix and freshness context.
 6. Phase 4 context includes provider health and cache summary when available.
+7. Phase 5 context adds watchlist membership, latest persisted snapshot time, ingestion status, and persistence availability.
 
 ## Deployment Flow
 
@@ -179,7 +217,7 @@ Narratives are grouped with keyword rules across earnings, product/news, analyst
 ## Known Architectural Limits
 
 - Background tasks should move to FastAPI lifespan.
-- Provider handling is not yet a clean plugin/provider abstraction.
 - Belief evidence is synthetic until live evidence providers are connected.
 - Provenance is endpoint-level for older market routes; belief evidence has per-item provenance.
 - Redis/FAISS/spaCy paths are partial and optional.
+- SQLite is local prototype persistence; multi-user production should use Postgres/managed storage and authenticated operations.

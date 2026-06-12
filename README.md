@@ -176,6 +176,49 @@ Endpoints:
 - `GET /api/ingestion/status`: scheduler state, recent runs, cache summary, provider health summary.
 - `POST /api/ingestion/refresh`: manually refresh up to 10 validated symbols. This is unauthenticated only for local prototype use and needs auth before production.
 
+## Durable Local Persistence
+
+Phase 5 adds SQLite-backed local persistence so operational state can survive backend restarts:
+
+```env
+ENABLE_PERSISTENCE=true
+DATABASE_URL=sqlite:///backend/data/qbeliefnet.db
+PERSISTENCE_MODE=sqlite
+MAX_SNAPSHOTS_PER_SYMBOL=100
+ENABLE_MANUAL_REFRESH=true
+MANUAL_REFRESH_TOKEN=
+REQUIRE_MANUAL_REFRESH_TOKEN=false
+MAX_MANUAL_REFRESH_SYMBOLS=10
+```
+
+SQLite is the default local persistence mode for prototype use. Postgres or a managed database is recommended before multi-user production deployment.
+
+Persisted stores:
+
+- belief snapshots and snapshot history,
+- ingestion run history,
+- provider health events,
+- cache metadata,
+- local workspace state: watchlist, tracking portfolio, belief alert rules,
+- operation audit log.
+
+Manual refresh has a local safety guard. In demo/local mode it may run without a token when `REQUIRE_MANUAL_REFRESH_TOKEN=false`. When token protection is enabled, send `X-QBN-Admin-Token`; the token is never returned by status endpoints.
+
+Workspace endpoints:
+
+- `GET /api/workspace`
+- `GET /api/watchlist`
+- `POST /api/watchlist`
+- `DELETE /api/watchlist/{symbol}`
+- `GET /api/portfolio`
+- `POST /api/portfolio`
+- `DELETE /api/portfolio/{id}`
+- `GET /api/alert-rules`
+- `POST /api/alert-rules`
+- `PATCH /api/alert-rules/{id}`
+- `DELETE /api/alert-rules/{id}`
+- `GET /api/audit/operations`
+
 ## Frontend Setup
 
 ```bash

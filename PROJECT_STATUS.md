@@ -16,6 +16,10 @@
 - Frontend evidence transparency panels for source mix, freshness, provider status, and trust/fallback state.
 - Provider runtime metrics, timeout/retry/circuit-breaker controls, stale-cache lifecycle metadata, ingestion run history, optional background refresh, and `/api/ingestion/status`.
 - Settings view pipeline observability panel for provider health, cache, and ingestion state.
+- SQLite local persistence for belief snapshots, ingestion runs, provider health events, cache metadata, workspace state, and operation audit logs.
+- Workspace endpoints for watchlist, tracking portfolio, and belief alert rules.
+- Manual refresh safety guard with optional `X-QBN-Admin-Token`.
+- Settings view persistence/workspace/audit panels.
 - Docker, Render, and Vercel deployment configs.
 - Backend acceptance tests for health, status, provenance, routes, mock data, LLM safety, belief engine, belief routes, narrative clusters, and explanations.
 
@@ -41,11 +45,12 @@
 - LangChain.
 - Production trading/investment recommendations.
 - Real authenticated user accounts.
-- Durable production portfolio/watchlist storage.
+- Real authenticated user accounts.
 - Full CI pipeline.
 - Frontend unit/integration tests.
 - Rich live social/news evidence aggregation beyond the basic market provider.
 - Production-authenticated manual ingestion refresh endpoint.
+- Postgres or managed database persistence for multi-user production.
 
 ## What Is Planned
 
@@ -64,6 +69,8 @@ The Phase 2 belief engine adds explainable analytics: every score has a formula,
 Phase 3 adds a provider pipeline so belief scores are backed by explicit evidence bundles. The UI and APIs now show source mix, freshness, provider status, cache hits, and fallback warnings.
 
 Phase 4 adds pipeline maturity: provider runtime metrics, reliability controls, visible cache lifecycle, optional background refresh, ingestion run history, WebSocket pipeline events, and frontend operational observability.
+
+Phase 5 adds local durability and workspace continuity. Belief snapshots, ingestion runs, provider health events, cache metadata, watchlists, tracking portfolio rows, belief alert rules, and operation audit records can now survive backend restarts when SQLite persistence is enabled. This is still a local product prototype, not a multi-user SaaS deployment.
 
 ## Resume/Product-Safe Summary
 

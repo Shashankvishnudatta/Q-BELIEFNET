@@ -182,6 +182,15 @@ export interface EvidenceFreshness {
   synthetic_item_count: number;
 }
 
+export interface PersistenceStatus {
+  enabled: boolean;
+  available: boolean;
+  mode: string;
+  database: 'configured' | 'not-configured' | string;
+  last_error?: string | null;
+  stores: Record<string, boolean>;
+}
+
 export interface ProviderResult {
   provider: string;
   source: string;
@@ -279,6 +288,11 @@ export interface ApiStatus {
     entries: number;
     allow_stale_on_failure?: boolean;
     stale_max_age_seconds?: number;
+    persistent_records?: {
+      records: number;
+      stale: number;
+      served_stale: number;
+    };
   };
   provider_health?: {
     healthy: number;
@@ -299,6 +313,57 @@ export interface ApiStatus {
       fallback_count: number;
     };
   };
+  persistence?: PersistenceStatus;
+  manual_refresh?: {
+    enabled: boolean;
+    requires_token: boolean;
+  };
+}
+
+export interface WorkspaceState {
+  watchlist: {
+    id?: number;
+    symbol: string;
+    name?: string | null;
+    created_at?: string;
+    notes?: string | null;
+    pinned?: number | boolean;
+    source?: string;
+  }[];
+  portfolio: {
+    id?: number;
+    symbol: string;
+    quantity: number;
+    average_cost_optional?: number | null;
+    created_at?: string;
+    notes?: string | null;
+    is_demo?: number | boolean;
+  }[];
+  alerts: {
+    id?: number;
+    symbol: string;
+    metric: string;
+    operator: string;
+    threshold: number;
+    enabled: number | boolean;
+    created_at?: string;
+    last_triggered_at?: string | null;
+    notes?: string | null;
+  }[];
+  settings: Record<string, unknown>;
+}
+
+export interface OperationAuditEntry {
+  id: number;
+  created_at: string;
+  operation: string;
+  triggered_by?: string | null;
+  request_id?: string | null;
+  symbol?: string | null;
+  symbols: string[];
+  status: string;
+  details: Record<string, unknown>;
+  error_code?: string | null;
 }
 
 type WebSocketMessage =
@@ -312,6 +377,7 @@ type WebSocketMessage =
   | { type: 'system_status'; payload?: { status: string; app_mode?: string; data_mode?: string; belief_stream?: string; provider_health?: ApiStatus['provider_health']; ingestion?: ApiStatus['ingestion'] }; meta?: ProvenanceMeta; id?: number }
   | { type: 'provider_health_update'; payload?: Record<string, unknown>; meta?: ProvenanceMeta; id?: number }
   | { type: 'ingestion_run_started' | 'ingestion_run_completed' | 'cache_refreshed' | 'cache_stale_served' | 'pipeline_warning'; payload?: Record<string, unknown>; meta?: ProvenanceMeta; id?: number }
+  | { type: 'workspace_updated' | 'operation_audit_created' | 'belief_snapshot_persisted' | 'ingestion_run_persisted' | 'alert_rule_triggered'; payload?: Record<string, unknown>; meta?: ProvenanceMeta; id?: number }
   | { type: 'error'; payload?: { code: string; message: string }; meta?: ProvenanceMeta; id?: number };
 
 interface AppState {
@@ -360,6 +426,16 @@ interface AppState {
   apiStatus: ApiStatus | null;
   apiStatusError: string | null;
   fetchApiStatus: () => Promise<void>;
+
+  // Durable Workspace State
+  workspace: WorkspaceState | null;
+  workspaceMeta: ProvenanceMeta | null;
+  workspaceError: string | null;
+  operationAudit: OperationAuditEntry[];
+  fetchWorkspace: () => Promise<void>;
+  addWatchlistSymbol: (ticker: string) => Promise<void>;
+  removeWatchlistSymbol: (ticker: string) => Promise<void>;
+  fetchOperationAudit: () => Promise<void>;
 
   // Watchlist State
   watchlist: string[];
@@ -541,6 +617,64 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch (error) {
       console.error('Failed to fetch API status:', error);
       set({ apiStatusError: error instanceof Error ? error.message : 'Backend offline' });
+    }
+  },
+
+  workspace: null,
+  workspaceMeta: null,
+  workspaceError: null,
+  operationAudit: [],
+  fetchWorkspace: async () => {
+    try {
+      const response = await fetch(buildApiUrl('/api/workspace'));
+      const { data, meta } = await parseApiResponse<WorkspaceState>(response);
+      const symbols = (data.watchlist ?? []).map((item) => item.symbol.toUpperCase());
+      set({ workspace: data, workspaceMeta: meta, workspaceError: null, watchlist: symbols });
+      try {
+        localStorage.setItem('qb-watchlist', JSON.stringify(symbols));
+      } catch (error) {
+        console.error('Failed to mirror backend watchlist locally:', error);
+      }
+    } catch (error) {
+      console.error('Failed to fetch workspace:', error);
+      set({ workspaceError: error instanceof Error ? error.message : 'Failed to fetch workspace' });
+    }
+  },
+  addWatchlistSymbol: async (ticker) => {
+    const normalized = ticker.toUpperCase().trim();
+    try {
+      const response = await fetch(buildApiUrl('/api/watchlist'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symbol: normalized }),
+      });
+      await parseApiResponse(response);
+      await get().fetchWorkspace();
+      await get().fetchOperationAudit();
+    } catch (error) {
+      console.error('Failed to add watchlist symbol:', error);
+      set({ workspaceError: error instanceof Error ? error.message : 'Failed to add watchlist symbol' });
+    }
+  },
+  removeWatchlistSymbol: async (ticker) => {
+    const normalized = ticker.toUpperCase().trim();
+    try {
+      const response = await fetch(buildApiUrl(`/api/watchlist/${encodeURIComponent(normalized)}`), { method: 'DELETE' });
+      await parseApiResponse(response);
+      await get().fetchWorkspace();
+      await get().fetchOperationAudit();
+    } catch (error) {
+      console.error('Failed to remove watchlist symbol:', error);
+      set({ workspaceError: error instanceof Error ? error.message : 'Failed to remove watchlist symbol' });
+    }
+  },
+  fetchOperationAudit: async () => {
+    try {
+      const response = await fetch(buildApiUrl('/api/audit/operations'));
+      const { data } = await parseApiResponse<OperationAuditEntry[]>(response);
+      set({ operationAudit: data });
+    } catch (error) {
+      console.error('Failed to fetch operation audit:', error);
     }
   },
 
@@ -739,8 +873,15 @@ export const useAppStore = create<AppState>((set, get) => ({
             || message.type === 'cache_refreshed'
             || message.type === 'cache_stale_served'
             || message.type === 'pipeline_warning'
+            || message.type === 'belief_snapshot_persisted'
+            || message.type === 'ingestion_run_persisted'
+            || message.type === 'alert_rule_triggered'
           ) {
             if (message.meta) set({ wsMeta: message.meta });
+          } else if (message.type === 'workspace_updated' || message.type === 'operation_audit_created') {
+            if (message.meta) set({ wsMeta: message.meta });
+            get().fetchWorkspace();
+            get().fetchOperationAudit();
           }
         } catch (err) {
           console.error('Error parsing WebSocket message:', err);

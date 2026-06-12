@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from typing import Any
 
 from app.core.config import settings
@@ -96,28 +97,34 @@ def prune_old_snapshots(symbol: str, *, conn=None) -> None:
 def get_latest_belief_snapshot(symbol: str) -> dict[str, Any] | None:
     if not persistence_enabled():
         return None
-    with db_connection() as conn:
-        row = conn.execute(
-            "SELECT * FROM belief_snapshots WHERE symbol = ? ORDER BY created_at DESC, id DESC LIMIT 1",
-            (symbol.upper(),),
-        ).fetchone()
+    try:
+        with db_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM belief_snapshots WHERE symbol = ? ORDER BY created_at DESC, id DESC LIMIT 1",
+                (symbol.upper(),),
+            ).fetchone()
+    except sqlite3.Error:
+        return None
     return dict(row) if row else None
 
 
 def get_belief_snapshot_history(symbol: str, limit: int = 30) -> list[dict[str, Any]]:
     if not persistence_enabled():
         return []
-    with db_connection() as conn:
-        rows = conn.execute(
-            """
-            SELECT created_at, score, velocity, coherence, fragility
-            FROM belief_snapshots
-            WHERE symbol = ?
-            ORDER BY created_at DESC, id DESC
-            LIMIT ?
-            """,
-            (symbol.upper(), limit),
-        ).fetchall()
+    try:
+        with db_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT created_at, score, velocity, coherence, fragility
+                FROM belief_snapshots
+                WHERE symbol = ?
+                ORDER BY created_at DESC, id DESC
+                LIMIT ?
+                """,
+                (symbol.upper(), limit),
+            ).fetchall()
+    except sqlite3.Error:
+        return []
     return [dict(row) for row in reversed(rows)]
 
 
@@ -156,8 +163,11 @@ def save_ingestion_run(run: IngestionRun, *, trigger_type: str = "background", t
 def recent_ingestion_runs(limit: int = 10) -> list[dict[str, Any]]:
     if not persistence_enabled():
         return []
-    with db_connection() as conn:
-        rows = conn.execute("SELECT * FROM ingestion_runs ORDER BY started_at DESC LIMIT ?", (limit,)).fetchall()
+    try:
+        with db_connection() as conn:
+            rows = conn.execute("SELECT * FROM ingestion_runs ORDER BY started_at DESC LIMIT ?", (limit,)).fetchall()
+    except sqlite3.Error:
+        return []
     data = []
     for row in rows:
         item = dict(row)
@@ -201,8 +211,11 @@ def save_provider_health_event(metric: ProviderRuntimeMetrics) -> None:
 def recent_provider_health_events(limit: int = 20) -> list[dict[str, Any]]:
     if not persistence_enabled():
         return []
-    with db_connection() as conn:
-        rows = conn.execute("SELECT * FROM provider_health_events ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
+    try:
+        with db_connection() as conn:
+            rows = conn.execute("SELECT * FROM provider_health_events ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
+    except sqlite3.Error:
+        return []
     return [dict(row) for row in rows]
 
 
@@ -241,8 +254,11 @@ def save_cache_record(*, cache_key: str, symbol: str, provider: str, mode: str, 
 def cache_record_summary() -> dict[str, int]:
     if not persistence_enabled():
         return {"records": 0, "stale": 0, "served_stale": 0}
-    with db_connection() as conn:
-        row = conn.execute("SELECT COUNT(*) records, SUM(stale) stale, SUM(served_stale) served_stale FROM evidence_cache_records").fetchone()
+    try:
+        with db_connection() as conn:
+            row = conn.execute("SELECT COUNT(*) records, SUM(stale) stale, SUM(served_stale) served_stale FROM evidence_cache_records").fetchone()
+    except sqlite3.Error:
+        return {"records": 0, "stale": 0, "served_stale": 0}
     return {"records": int(row["records"] or 0), "stale": int(row["stale"] or 0), "served_stale": int(row["served_stale"] or 0)}
 
 
@@ -263,8 +279,11 @@ def audit_log(operation: str, *, status: str, triggered_by: str | None = None, r
 def recent_audit_operations(limit: int = 25) -> list[dict[str, Any]]:
     if not persistence_enabled():
         return []
-    with db_connection() as conn:
-        rows = conn.execute("SELECT * FROM operation_audit_log ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
+    try:
+        with db_connection() as conn:
+            rows = conn.execute("SELECT * FROM operation_audit_log ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
+    except sqlite3.Error:
+        return []
     data = []
     for row in rows:
         item = dict(row)
@@ -290,8 +309,11 @@ def add_watchlist_item(symbol: str, name: str | None = None, notes: str | None =
 def get_watchlist_items() -> list[dict[str, Any]]:
     if not persistence_enabled():
         return []
-    with db_connection() as conn:
-        rows = conn.execute("SELECT * FROM watchlist_items ORDER BY pinned DESC, created_at DESC").fetchall()
+    try:
+        with db_connection() as conn:
+            rows = conn.execute("SELECT * FROM watchlist_items ORDER BY pinned DESC, created_at DESC").fetchall()
+    except sqlite3.Error:
+        return []
     return [dict(row) for row in rows]
 
 
@@ -322,8 +344,11 @@ def add_portfolio_item(symbol: str, quantity: float, average_cost_optional: floa
 def get_portfolio_items() -> list[dict[str, Any]]:
     if not persistence_enabled():
         return []
-    with db_connection() as conn:
-        rows = conn.execute("SELECT * FROM portfolio_items ORDER BY created_at DESC").fetchall()
+    try:
+        with db_connection() as conn:
+            rows = conn.execute("SELECT * FROM portfolio_items ORDER BY created_at DESC").fetchall()
+    except sqlite3.Error:
+        return []
     return [dict(row) for row in rows]
 
 
@@ -358,8 +383,11 @@ def create_alert_rule(symbol: str, metric: str, operator: str, threshold: float,
 def get_alert_rules() -> list[dict[str, Any]]:
     if not persistence_enabled():
         return []
-    with db_connection() as conn:
-        rows = conn.execute("SELECT * FROM alert_rules ORDER BY created_at DESC").fetchall()
+    try:
+        with db_connection() as conn:
+            rows = conn.execute("SELECT * FROM alert_rules ORDER BY created_at DESC").fetchall()
+    except sqlite3.Error:
+        return []
     return [dict(row) for row in rows]
 
 

@@ -28,6 +28,15 @@ Do not put Hugging Face, RapidAPI, YouTube, Reddit, Stocktwits, database, or pas
 - Manual refresh is unauthenticated in this local prototype and must be protected before production use.
 - Background refresh logs must not include provider secrets or raw credential values.
 
+## Durable Persistence Policy
+
+- SQLite is used for local prototype persistence.
+- Database files under `backend/data/*.db`, `*.sqlite`, and `*.sqlite3` must remain ignored.
+- The database stores derived product state only: belief snapshots, provider health metadata, cache metadata, workspace rows, and audit operations.
+- Do not store API keys, refresh tokens, passwords, raw env values, or private provider credentials in SQLite.
+- Operation audit entries must describe what happened without recording secrets.
+- Manual refresh tokens are backend-only and must never be returned by `/api/status`, audit logs, or error details.
+
 ## Git History Exposure Warning
 
 A Hugging Face-style token existed in tracked backend source history. Current source no longer contains it, but Git history still needs cleanup before publishing.
@@ -72,6 +81,7 @@ build/
 .venv/
 venv/
 backend/.venv/
+backend/.test_tmp/
 __pycache__/
 *.pyc
 *.log

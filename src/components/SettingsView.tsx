@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
-import { Activity, Database, Plug, PlugZap, RefreshCw, Save, ServerCog, Timer, User, LogIn, LogOut } from 'lucide-react';
+import { Activity, Database, Plug, PlugZap, RefreshCw, Save, ServerCog, Timer, User, LogIn, LogOut, ShieldCheck, ListPlus, ClipboardList } from 'lucide-react';
 import { useAppStore } from '@/src/store';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -9,12 +9,33 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 
 export function SettingsView() {
-  const { wsConnected, connectWebSocket, disconnectWebSocket, apiStatus, apiStatusError, fetchApiStatus } = useAppStore();
+  const {
+    wsConnected,
+    connectWebSocket,
+    disconnectWebSocket,
+    apiStatus,
+    apiStatusError,
+    fetchApiStatus,
+    workspace,
+    workspaceError,
+    operationAudit,
+    fetchWorkspace,
+    addWatchlistSymbol,
+    removeWatchlistSymbol,
+    fetchOperationAudit,
+  } = useAppStore();
   const [refreshWindow, setRefreshWindow] = useState('30');
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [email, setEmail] = useState('');
   const [displayName, setDisplayName] = useState('Quant Analyst');
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [watchSymbol, setWatchSymbol] = useState('');
+
+  useEffect(() => {
+    fetchApiStatus();
+    fetchWorkspace();
+    fetchOperationAudit();
+  }, [fetchApiStatus, fetchWorkspace, fetchOperationAudit]);
 
   return (
     <div className="flex flex-col h-full w-full px-4 sm:px-8 py-8 max-w-4xl mx-auto overflow-y-auto">
@@ -42,6 +63,14 @@ export function SettingsView() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div className="rounded-lg border border-white/5 bg-black/15 p-3">
                 <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+                  <ShieldCheck className="w-4 h-4" /> Persistence
+                </div>
+                <div className="text-sm">Mode: {apiStatus?.persistence?.mode ?? 'unknown'}</div>
+                <div className="text-sm">Available: {apiStatus?.persistence?.available ? 'yes' : 'no'}</div>
+                <div className="text-sm">Manual refresh: {apiStatus?.manual_refresh?.enabled ? 'enabled' : 'disabled'}</div>
+              </div>
+              <div className="rounded-lg border border-white/5 bg-black/15 p-3">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
                   <Activity className="w-4 h-4" /> Provider Health
                 </div>
                 <div className="text-sm">Healthy: {apiStatus?.provider_health?.healthy ?? 0}</div>
@@ -55,6 +84,7 @@ export function SettingsView() {
                 <div className="text-sm">Backend: {apiStatus?.evidence_cache?.backend ?? 'unknown'}</div>
                 <div className="text-sm">Entries: {apiStatus?.evidence_cache?.entries ?? 0}</div>
                 <div className="text-sm">TTL: {apiStatus?.evidence_cache?.ttl_seconds ?? 0}s</div>
+                <div className="text-sm">Durable records: {apiStatus?.evidence_cache?.persistent_records?.records ?? 0}</div>
               </div>
               <div className="rounded-lg border border-white/5 bg-black/15 p-3">
                 <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
@@ -79,6 +109,90 @@ export function SettingsView() {
                   </div>
                 </div>
               ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="glass-panel border-white/5 bg-card/30">
+          <CardHeader>
+            <CardTitle className="text-lg font-medium flex items-center gap-2">
+              <ListPlus className="w-5 h-5 text-emerald-400" />
+              Local Workspace
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                value={watchSymbol}
+                onChange={(event) => setWatchSymbol(event.target.value.toUpperCase())}
+                placeholder="Add symbol"
+                className="max-w-40"
+              />
+              <Button
+                onClick={() => {
+                  if (watchSymbol.trim()) {
+                    addWatchlistSymbol(watchSymbol.trim());
+                    setWatchSymbol('');
+                  }
+                }}
+                className="bg-teal-500 hover:bg-teal-600 text-white"
+              >
+                <ListPlus className="w-4 h-4 mr-1" /> Add
+              </Button>
+              <Button onClick={fetchWorkspace} variant="outline" className="border-white/10 bg-white/5 hover:bg-white/10">
+                <RefreshCw className="w-4 h-4 mr-1" /> Sync
+              </Button>
+            </div>
+            {workspaceError ? <p className="text-sm text-amber-200">{workspaceError}</p> : null}
+            <div className="flex flex-wrap gap-2">
+              {(workspace?.watchlist ?? []).length ? (
+                workspace?.watchlist.map((item) => (
+                  <Badge key={item.symbol} variant="outline" className="bg-white/5 border-white/10 text-zinc-200 gap-2">
+                    {item.symbol}
+                    <button
+                      className="text-muted-foreground hover:text-white"
+                      onClick={() => removeWatchlistSymbol(item.symbol)}
+                      aria-label={`Remove ${item.symbol}`}
+                    >
+                      x
+                    </button>
+                  </Badge>
+                ))
+              ) : (
+                <p className="text-sm text-muted-foreground">No saved symbols yet.</p>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Watchlist, tracking portfolio, and belief alert rules are stored locally when backend persistence is available.
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="glass-panel border-white/5 bg-card/30">
+          <CardHeader>
+            <CardTitle className="text-lg font-medium flex items-center gap-2">
+              <ClipboardList className="w-5 h-5 text-sky-400" />
+              Operation Audit
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm text-muted-foreground">Recent durable operations: refreshes, workspace edits, and snapshot generation.</p>
+              <Button onClick={fetchOperationAudit} variant="outline" className="border-white/10 bg-white/5 hover:bg-white/10">
+                <RefreshCw className="w-4 h-4 mr-1" /> Refresh
+              </Button>
+            </div>
+            <div className="space-y-2">
+              {operationAudit.slice(0, 6).map((entry) => (
+                <div key={entry.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/5 bg-black/10 px-3 py-2 text-sm">
+                  <span>{entry.operation}</span>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span>{entry.symbol ?? entry.symbols?.join(', ') ?? 'system'}</span>
+                    <Badge variant="secondary" className="bg-white/5 text-muted-foreground border-white/5">{entry.status}</Badge>
+                  </div>
+                </div>
+              ))}
+              {!operationAudit.length ? <p className="text-sm text-muted-foreground">No recorded operations yet.</p> : null}
             </div>
           </CardContent>
         </Card>

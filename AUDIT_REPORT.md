@@ -222,3 +222,55 @@ Phase 4 tests cover:
 4. Add frontend tests for status/provenance/belief panels.
 5. Build live evidence provider abstraction with retries, caching, and per-record provenance.
 6. Add richer live news/social providers and observability around provider failures.
+
+## Phase 5 Persistence and Workspace Audit
+
+State that was in memory before Phase 5:
+
+- provider cache contents and cache lifecycle metadata,
+- ingestion run history,
+- provider runtime health history,
+- recent belief snapshots,
+- manual refresh operation history,
+- user workspace state beyond frontend localStorage.
+
+State moved to SQLite-backed local persistence:
+
+- `belief_snapshots`: persisted score, metrics, provenance, evidence bundle, narratives, and explanation JSON,
+- `ingestion_runs`: manual/background refresh outcomes and trigger metadata,
+- `provider_health_events`: redacted provider status/latency/circuit snapshots,
+- `evidence_cache_records`: durable cache metadata and hit/stale counts,
+- `watchlist_items`, `portfolio_items`, `alert_rules`: local workspace continuity,
+- `operation_audit_log`: auditable manual refreshes, workspace edits, and snapshot generation.
+
+State that remains intentionally ephemeral:
+
+- active WebSocket clients,
+- in-flight background refresh task state,
+- full in-memory evidence cache payloads,
+- UI-only preferences such as temporary form state.
+
+Local database status:
+
+- Default database path is `backend/data/qbeliefnet.db`.
+- Database files are ignored by Git.
+- Existing local `backend/data/metrics.db` remains a local artifact and should not be tracked.
+- Tests use ignored workspace-local database files under `backend/.test_tmp/`.
+
+Manual refresh safety:
+
+- `POST /api/ingestion/refresh` validates symbols, enforces `MAX_MANUAL_REFRESH_SYMBOLS`, and can require `X-QBN-Admin-Token`.
+- Status reports whether manual refresh is enabled and whether a token is required, but never exposes token values.
+- Manual refresh operations are persisted in the operation audit log.
+
+Workspace continuity:
+
+- New persistent workspace APIs expose watchlist, tracking portfolio, and belief alert rules.
+- These are local tracking features only and do not place trades or represent brokerage data.
+
+Remaining Phase 5 risks:
+
+- SQLite is appropriate for a local prototype, but Postgres or managed storage is recommended before multi-user production.
+- Manual refresh guard is not a full authentication system.
+- FastAPI startup still uses deprecated `on_event`; lifespan migration remains recommended.
+- Frontend tests and CI remain future work.
